@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from urllib.parse import urlparse
 
 try:
     import psycopg2
@@ -11,16 +10,17 @@ SQLITE_DB = "fraud_app.db"
 
 
 def _get_db_url():
-    # Streamlit Cloud secrets => os.environ
     return os.getenv("DATABASE_URL", "").strip()
 
 
-def init_db():
+def _use_postgres():
     db_url = _get_db_url()
+    return bool(db_url) and (psycopg2 is not None)
 
-    if db_url:
-        # PostgreSQL (Supabase/Neon/etc.)
-        conn = psycopg2.connect(db_url)
+
+def init_db():
+    if _use_postgres():
+        conn = psycopg2.connect(_get_db_url())
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS predictions (
@@ -33,27 +33,26 @@ def init_db():
         conn.commit()
         cur.close()
         conn.close()
-    else:
-        # SQLite fallback (local)
-        conn = sqlite3.connect(SQLITE_DB)
-        c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS predictions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                risk_level TEXT NOT NULL,
-                fraud_probability REAL NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
+        return
+
+    # SQLite fallback
+    conn = sqlite3.connect(SQLITE_DB)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            risk_level TEXT NOT NULL,
+            fraud_probability REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 
 def insert_prediction(risk_level: str, probability: float):
-    db_url = _get_db_url()
-
-    if db_url:
-        conn = psycopg2.connect(db_url)
+    if _use_postgres():
+        conn = psycopg2.connect(_get_db_url())
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO predictions (risk_level, fraud_probability) VALUES (%s, %s)",
@@ -62,22 +61,21 @@ def insert_prediction(risk_level: str, probability: float):
         conn.commit()
         cur.close()
         conn.close()
-    else:
-        conn = sqlite3.connect(SQLITE_DB)
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO predictions (risk_level, fraud_probability) VALUES (?, ?)",
-            (risk_level, probability)
-        )
-        conn.commit()
-        conn.close()
+        return
+
+    conn = sqlite3.connect(SQLITE_DB)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO predictions (risk_level, fraud_probability) VALUES (?, ?)",
+        (risk_level, probability)
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_stats():
-    db_url = _get_db_url()
-
-    if db_url:
-        conn = psycopg2.connect(db_url)
+    if _use_postgres():
+        conn = psycopg2.connect(_get_db_url())
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM predictions")
         total = cur.fetchone()[0]
@@ -86,12 +84,12 @@ def get_stats():
         cur.close()
         conn.close()
         return int(total), int(high_risk)
-    else:
-        conn = sqlite3.connect(SQLITE_DB)
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM predictions")
-        total = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM predictions WHERE risk_level='HIGH'")
-        high_risk = c.fetchone()[0]
-        conn.close()
-        return int(total), int(high_risk)
+
+    conn = sqlite3.connect(SQLITE_DB)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM predictions")
+    total = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM predictions WHERE risk_level='HIGH'")
+    high_risk = c.fetchone()[0]
+    conn.close()
+    return int(total), int(high_risk)
