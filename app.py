@@ -2,6 +2,10 @@ import streamlit as st
 import joblib
 import numpy as np
 import pandas as pd
+from database import init_db, insert_prediction, get_stats
+
+# ---------------- INITIALIZE DATABASE ----------------
+init_db()
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="FraudGuard AI", page_icon="💳", layout="wide")
@@ -10,18 +14,11 @@ st.set_page_config(page_title="FraudGuard AI", page_icon="💳", layout="wide")
 st.markdown("""
 <style>
 .stApp {background-color: #0E1117; color: white;}
-.sidebar .sidebar-content {background-color: #161A25;}
 div.stButton > button {
     background-color: #FF4B4B;
     color: white;
     border-radius: 6px;
     height: 3em;
-}
-.metric-card {
-    background-color: #1C1F2B;
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -48,71 +45,78 @@ if not st.session_state.authenticated:
 model = joblib.load("fraud_model.pkl")
 
 # ---------------- SIDEBAR NAVIGATION ----------------
-st.sidebar.title("Transaction Risk Parameters")
-menu = st.sidebar.radio("Navigation", 
-                        ["📊 Dashboard", "🔍 Single Prediction", 
-                         "📂 Bulk Upload", "ℹ Model Info", "🚪 Logout"])
+st.sidebar.title("FraudGuard AI")
+menu = st.sidebar.radio(
+    "Navigation",
+    ["📊 Dashboard", "🔍 Single Prediction", "📂 Bulk Upload", "ℹ Model Info", "🚪 Logout"]
+)
 
+# ---------------- LOGOUT ----------------
 if menu == "🚪 Logout":
     st.session_state.authenticated = False
     st.experimental_rerun()
 
-# ---------------- DASHBOARD ----------------
+# ================= DASHBOARD =================
 if menu == "📊 Dashboard":
     st.title("📊 Fraud Detection Dashboard")
+
+    total, high_risk = get_stats()
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown('<div class="metric-card"><h3>Total Transactions</h3><h2>10,000+</h2></div>', unsafe_allow_html=True)
+        st.metric("Total Predictions", total)
 
     with col2:
-        st.markdown('<div class="metric-card"><h3>Fraud Detection Accuracy</h3><h2>99%</h2></div>', unsafe_allow_html=True)
+        st.metric("High Risk Transactions", high_risk)
 
     with col3:
-        st.markdown('<div class="metric-card"><h3>Model Type</h3><h2>Random Forest</h2></div>', unsafe_allow_html=True)
+        if total > 0:
+            fraud_rate = (high_risk / total) * 100
+            st.metric("Fraud Rate %", f"{fraud_rate:.2f}%")
+        else:
+            st.metric("Fraud Rate %", "0%")
 
-# ---------------- SINGLE PREDICTION ----------------
+# ================= SINGLE PREDICTION =================
 elif menu == "🔍 Single Prediction":
     st.title("🔍 Single Transaction Prediction")
 
     feature_names = [
-    "Transaction Velocity Score",
-    "Spending Pattern Deviation",
-    "Merchant Risk Index",
-    "Geolocation Variance Score",
-    "Device Risk Fingerprint",
-    "Authorization Anomaly Score",
-    "Card Usage Irregularity",
-    "Time-Based Risk Signal",
-    "High-Value Transaction Marker",
-    "Behavioral Drift Index",
-    "Historical Fraud Correlation",
-    "Chargeback Exposure Score",
-    "Customer Trust Rating",
-    "Purchase Frequency Risk",
-    "Account Stability Indicator",
-    "Payment Channel Risk",
-    "Digital Footprint Strength",
-    "Cross-Border Activity Score",
-    "Suspicious Activity Probability",
-    "Financial Consistency Metric",
-    "Transaction Entropy Index",
-    "Adaptive Risk Gradient",
-    "Cardholder Behavior Variance",
-    "AML Compliance Indicator",
-    "Fraud Pattern Similarity Score",
-    "Identity Verification Risk",
-    "Network Risk Exposure",
-    "Transaction Confidence Score",
-    "Composite Fraud Risk Index"
-]
-
+        "Transaction Velocity Score",
+        "Spending Pattern Deviation",
+        "Merchant Risk Index",
+        "Geolocation Variance Score",
+        "Device Risk Fingerprint",
+        "Authorization Anomaly Score",
+        "Card Usage Irregularity",
+        "Time-Based Risk Signal",
+        "High-Value Transaction Marker",
+        "Behavioral Drift Index",
+        "Historical Fraud Correlation",
+        "Chargeback Exposure Score",
+        "Customer Trust Rating",
+        "Purchase Frequency Risk",
+        "Account Stability Indicator",
+        "Payment Channel Risk",
+        "Digital Footprint Strength",
+        "Cross-Border Activity Score",
+        "Suspicious Activity Probability",
+        "Financial Consistency Metric",
+        "Transaction Entropy Index",
+        "Adaptive Risk Gradient",
+        "Cardholder Behavior Variance",
+        "AML Compliance Indicator",
+        "Fraud Pattern Similarity Score",
+        "Identity Verification Risk",
+        "Network Risk Exposure",
+        "Transaction Confidence Score",
+        "Composite Fraud Risk Index"
+    ]
 
     input_data = []
     for name in feature_names:
-        val = st.number_input(name, value=0.0)
-        input_data.append(val)
+        value = st.number_input(name, value=0.0)
+        input_data.append(value)
 
     if st.button("Predict Transaction"):
         input_array = np.array([input_data])
@@ -122,14 +126,19 @@ elif menu == "🔍 Single Prediction":
         fraud_prob = probability[0][1] * 100
 
         if prediction[0] == 1:
-            st.error("⚠ Fraudulent Transaction")
+            risk_label = "HIGH"
+            st.error("🔴 HIGH RISK TRANSACTION DETECTED")
         else:
-            st.success("✅ Legitimate Transaction")
+            risk_label = "LOW"
+            st.success("🟢 LOW RISK TRANSACTION")
 
         st.progress(int(fraud_prob))
         st.write(f"Fraud Probability: {fraud_prob:.2f}%")
 
-# ---------------- BULK UPLOAD ----------------
+        # Save to database
+        insert_prediction(risk_label, fraud_prob)
+
+# ================= BULK UPLOAD =================
 elif menu == "📂 Bulk Upload":
     st.title("📂 Bulk Fraud Detection")
 
@@ -138,7 +147,8 @@ elif menu == "📂 Bulk Upload":
     if uploaded_file:
         data = pd.read_csv(uploaded_file)
         predictions = model.predict(data)
-        data["Fraud_Prediction"] = predictions
+
+        data["Risk_Level"] = ["HIGH" if p == 1 else "LOW" for p in predictions]
 
         fraud_count = sum(predictions)
         total = len(predictions)
@@ -148,10 +158,10 @@ elif menu == "📂 Bulk Upload":
 
         st.markdown("### 📊 Summary")
         st.write(f"Total Transactions: {total}")
-        st.write(f"Fraudulent Transactions: {fraud_count}")
+        st.write(f"High Risk Transactions: {fraud_count}")
         st.write(f"Fraud Percentage: {fraud_percent:.2f}%")
 
-# ---------------- MODEL INFO ----------------
+# ================= MODEL INFO =================
 elif menu == "ℹ Model Info":
     st.title("ℹ Model Information")
 
