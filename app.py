@@ -2,7 +2,7 @@ import streamlit as st
 import joblib
 import numpy as np
 import pandas as pd
-from database import init_db, insert_prediction, get_stats
+from database import init_db, insert_prediction, get_stats, get_daily_trend
 
 # ---------------- INITIALIZE DATABASE ----------------
 init_db()
@@ -60,8 +60,10 @@ if menu == "🚪 Logout":
 if menu == "📊 Dashboard":
     st.title("📊 Fraud Detection Dashboard")
 
+    # Get stats from database
     total, high_risk = get_stats()
 
+    # Metrics Row
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -77,6 +79,41 @@ if menu == "📊 Dashboard":
         else:
             st.metric("Fraud Rate %", "0%")
 
+    # ---------------- DAILY TREND CHART ----------------
+    st.subheader("📈 Daily Fraud Trend (Last 14 Days)")
+
+    try:
+        rows = get_daily_trend(14)
+
+        if rows:
+            df_trend = pd.DataFrame(
+                rows,
+                columns=["Date", "Total Transactions", "High Risk Transactions"]
+            )
+
+            df_trend["Fraud Rate %"] = (
+                df_trend["High Risk Transactions"]
+                / df_trend["Total Transactions"]
+            ) * 100
+
+            st.write("### Transactions Trend")
+            st.line_chart(
+                df_trend.set_index("Date")[
+                    ["Total Transactions", "High Risk Transactions"]
+                ]
+            )
+
+            st.write("### Fraud Rate Trend")
+            st.line_chart(
+                df_trend.set_index("Date")[["Fraud Rate %"]]
+            )
+
+        else:
+            st.info("No prediction data available yet.")
+
+    except Exception as e:
+        st.warning("Trend chart will appear after database setup.")
+    
 # ================= SINGLE PREDICTION =================
 elif menu == "🔍 Single Prediction":
     st.title("🔍 Single Transaction Prediction")
