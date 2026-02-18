@@ -48,7 +48,7 @@ if not st.session_state.authenticated:
 model = joblib.load("fraud_model.pkl")
 
 # ---------------- SIDEBAR NAVIGATION ----------------
-st.sidebar.title("FraudGuard AI")
+st.sidebar.title("Transaction Risk Parameters")
 menu = st.sidebar.radio("Navigation", 
                         ["📊 Dashboard", "🔍 Single Prediction", 
                          "📂 Bulk Upload", "ℹ Model Info", "🚪 Logout"])
@@ -76,7 +76,38 @@ if menu == "📊 Dashboard":
 elif menu == "🔍 Single Prediction":
     st.title("🔍 Single Transaction Prediction")
 
-    feature_names = [f"Risk Feature {i+1}" for i in range(29)]
+    feature_names = [
+    "Transaction Velocity Score",
+    "Spending Pattern Deviation",
+    "Merchant Risk Index",
+    "Geolocation Variance Score",
+    "Device Risk Fingerprint",
+    "Authorization Anomaly Score",
+    "Card Usage Irregularity",
+    "Time-Based Risk Signal",
+    "High-Value Transaction Marker",
+    "Behavioral Drift Index",
+    "Historical Fraud Correlation",
+    "Chargeback Exposure Score",
+    "Customer Trust Rating",
+    "Purchase Frequency Risk",
+    "Account Stability Indicator",
+    "Payment Channel Risk",
+    "Digital Footprint Strength",
+    "Cross-Border Activity Score",
+    "Suspicious Activity Probability",
+    "Financial Consistency Metric",
+    "Transaction Entropy Index",
+    "Adaptive Risk Gradient",
+    "Cardholder Behavior Variance",
+    "AML Compliance Indicator",
+    "Fraud Pattern Similarity Score",
+    "Identity Verification Risk",
+    "Network Risk Exposure",
+    "Transaction Confidence Score",
+    "Composite Fraud Risk Index"
+]
+
 
     input_data = []
     for name in feature_names:
