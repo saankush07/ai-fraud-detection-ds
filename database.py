@@ -93,3 +93,36 @@ def get_stats():
     high_risk = c.fetchone()[0]
     conn.close()
     return int(total), int(high_risk)
+def get_daily_trend(limit: int = 14):
+    if _use_postgres():
+        conn = psycopg2.connect(_get_db_url())
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DATE(created_at) AS day,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN risk_level='HIGH' THEN 1 ELSE 0 END) AS high
+            FROM predictions
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    else:
+        conn = sqlite3.connect(SQLITE_DB)
+        c = conn.cursor()
+        c.execute("""
+            SELECT DATE(created_at) AS day,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN risk_level='HIGH' THEN 1 ELSE 0 END) AS high
+            FROM predictions
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            LIMIT ?
+        """, (limit,))
+        rows = c.fetchall()
+        conn.close()
+
+    rows = list(reversed(rows))  # oldest -> newest
+    return rows
